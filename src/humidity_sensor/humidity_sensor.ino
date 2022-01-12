@@ -10,7 +10,7 @@ void setup()
 
 void loop()
 {
-  soilMoistureValue = analogRead(A0); //put Sensor insert into soil
+  soilMoistureValue = analogRead(A0);
   soilmoisturepercent = map(soilMoistureValue, AirValue, WaterValue, 0, 100);
   if (soilmoisturepercent >= 100)
   {
