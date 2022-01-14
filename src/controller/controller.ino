@@ -27,18 +27,34 @@
 
 // Speaker
 
-// Speaker pitches
-#define COLD "cold.wav"
-#define HOT "hot.wav"
-#define WET "wet.wav"
-#define DRY "dry.wav"
-#define BRIGHT "bright.wav"
-#define DARK "dark.wav"
-
-// Speaker sound lengths
-#define MEDIUM 5000
-#define WARNING 1000
-#define ALARM 100
+// Sounds
+// Humidity
+#define H_MAX_ALARM "wet.wav"
+#define H_MAX_WARN "wet.wav"
+#define H_MAX_OK "wet.wav"
+#define H_MAX_GOOD "humidity.wav"
+#define H_MIN_GOOD "humidity.wav"
+#define H_MIN_OK "dry.wav"
+#define H_MIN_WARN "dry.wav"
+#define H_MIN_ALARM "dry.wav"
+// Light 
+#define L_MAX_ALARM "bright.wav"
+#define L_MAX_WARN "bright.wav"
+#define L_MAX_OK "bright.wav"
+#define L_MAX_GOOD "light.wav"
+#define L_MIN_GOOD "light.wav"
+#define L_MIN_OK "dark.wav"
+#define L_MIN_WARN "dark.wav"
+#define L_MIN_ALARM "dark.wav"
+// Temperature
+#define T_MAX_ALARM "hot.wav"
+#define T_MAX_WARN "hot.wav"
+#define T_MAX_OK "hot.wav"
+#define T_MAX_GOOD "temp.wav"
+#define T_MIN_GOOD "temp.wav"
+#define T_MIN_OK "cold.wav"
+#define T_MIN_WARN "cold.wav"
+#define T_MIN_ALARM "cold.wav"
 
 // Servo
 
@@ -49,17 +65,17 @@
 // State flags
 
 // Humidity flags
-#define WET_ALARM 94
-#define WET_WARN 87
-#define MAX_HUMIDITY 84
-#define MIN_HUMIDITY 72
+#define WET_ALARM 98
+#define WET_WARN 95
+#define MAX_HUMIDITY 90
+#define MIN_HUMIDITY 70
 #define DRY_WARN 45
 #define DRY_ALARM 15
 
 // Brightness flags
-#define BRIGHT_ALARM 90
-#define BRIGHT_WARN 85
-#define MAX_BRIGHTNESS 80
+#define BRIGHT_ALARM 98
+#define BRIGHT_WARN 95
+#define MAX_BRIGHTNESS 92
 #define MIN_BRIGHTNESS 30
 #define DARK_WARN 15
 #define DARK_ALARM 1
@@ -77,6 +93,8 @@ TMRpcm tmrpcm;
 OneWire oneWire(TEMP_SENSOR_PIN);
 DallasTemperature sensors(&oneWire);
 
+int prev_humidity = MIN_HUMIDITY, prev_light = MIN_BRIGHTNESS, prev_temp = MIN_TEMP;
+
 void setup()
 {
   // Set mode of analog pin
@@ -87,6 +105,7 @@ void setup()
   Serial.begin(9600);
   // Begin reading data from temperature sensor
   sensors.begin();
+  tmrpcm.setVolume(6);
   tmrpcm.speakerPin = SPEAKER_PIN;
   if (!SD.begin(SD_CARD_PIN)) {
     Serial.println("SD fail");
@@ -95,54 +114,95 @@ void setup()
 
 void loop()
 {
- Serial.print("\nHumidity: ");
- Serial.print(getHumidity());
- Serial.print("%\nBrigtness: ");
- Serial.print(getBrightness());
- Serial.print("%\nTemperature: ");
- Serial.print(getTemp());
+int humidity = getHumidity(), light = getBrightness(), temp = getTemp();
+ Serial.print("\nPrevious humidity: ");
+ Serial.print(prev_humidity);
+ Serial.print("%\nPrevious brigtness: ");
+ Serial.print(prev_light);
+ Serial.print("%\nPrevious temperature: ");
+ Serial.print(prev_temp);
  Serial.print("°C\n");
- checkBounds(getHumidity(), WET, MAX_HUMIDITY, WET_WARN, WET_ALARM, DRY, MIN_HUMIDITY, DRY_WARN, DRY_ALARM);
- checkBounds(getBrightness(), BRIGHT, MAX_BRIGHTNESS, BRIGHT_WARN, BRIGHT_WARN, DARK, MIN_BRIGHTNESS, DARK_WARN, DARK_ALARM);
- checkBounds(getTemp(), HOT, MAX_TEMP, HOT_WARN, HOT_ALARM, COLD, MIN_TEMP, COLD_WARN, COLD_ALARM);
+ Serial.print("\nHumidity: ");
+ Serial.print(humidity);
+ Serial.print("%\nBrigtness: ");
+ Serial.print(light);
+ Serial.print("%\nTemperature: ");
+ Serial.print(temp);
+ Serial.print("°C\n");
+prev_humidity = checkBounds(humidity, prev_humidity,
+            MIN_HUMIDITY, WET_WARN, WET_ALARM,
+            H_MAX_GOOD, H_MAX_OK,
+            H_MAX_WARN, H_MAX_ALARM,
+            MAX_HUMIDITY, DRY_WARN, DRY_ALARM,
+            H_MIN_GOOD, H_MIN_OK,
+            H_MIN_WARN, H_MIN_ALARM);
+ delay(4000);
+ prev_light = checkBounds(light, prev_light,
+            MAX_BRIGHTNESS, BRIGHT_WARN, BRIGHT_ALARM,
+            L_MAX_GOOD, L_MAX_OK,
+            L_MAX_WARN, L_MAX_ALARM,
+            MIN_BRIGHTNESS, DARK_WARN, DARK_ALARM,
+            L_MIN_GOOD, L_MIN_OK,
+            L_MIN_WARN, L_MIN_ALARM);
+ delay(4000);
+ prev_temp = checkBounds(temp, prev_temp,
+            MAX_TEMP, HOT_WARN, HOT_ALARM,
+            T_MAX_GOOD, T_MAX_OK,
+            T_MAX_WARN, T_MAX_ALARM,
+            MIN_TEMP, COLD_WARN, COLD_ALARM,
+            T_MIN_GOOD, T_MIN_OK,
+            T_MIN_WARN, T_MIN_ALARM);
+  delay(4000);
 }
 
-void checkBounds(int input, const char* maxSound, int maxValue, int warnMaxValue, int alertMaxValue, const char* minSound, int minValue, int warnMinValue, int alertMinValue) {
-  int delayTime = 0;
+int checkBounds(int input, int prevInput,
+        int maxValue, int warnMaxValue, int alarmMaxValue, 
+        char const *goodMaxSound, char const *okMaxSound,
+        char const *warnMaxSound, char const *alarmMaxSound,
+        int minValue, int warnMinValue, int alarmMinValue,
+        char const *goodMinSound, char const *okMinSound,
+        char const *warnMinSound, char const *alarmMinSound) {
+          
   char* sound = NULL;
-  
-  if(input > maxValue) {
-    sound = maxSound;
-    if (input >= alertMaxValue)
-    {
-      delayTime = ALARM;
+  if (input < maxValue && input > minValue) {
+    if(prevInput > maxValue) {
+      sound = strdup(goodMaxSound);
     }
-    else if (alertMaxValue > input && input > warnMaxValue)
-    {
-      delayTime = WARNING;
+    else if(prevInput < minValue){
+      sound = strdup(goodMinSound);
     }
-    else
+   }
+  else if(input > maxValue) {
+    if (input >= alarmMaxValue)
     {
-      delayTime = MEDIUM;
+      sound = strdup(warnMaxSound);
     }
- }
- else if (input < minValue)
- {
-  sound = minSound;
-  if (input <= alertMinValue)
+    else if (alarmMaxValue > input && input > warnMaxValue)
     {
-      delayTime = ALARM;
-    }
-    else if (alertMinValue < input && input < warnMinValue)
-    {
-      delayTime = WARNING;
+      sound = strdup(alarmMaxSound);
     }
     else
     {
-      delayTime = MEDIUM;
+      sound = strdup(okMaxSound);
     }
- }
- playSound(sound, delayTime);
+   }
+   else if (input < minValue)
+   {
+    if (input <= alarmMinValue)
+      {
+        sound = strdup(warnMinSound);
+      }
+      else if (alarmMinValue < input && input < warnMinValue)
+      {
+        sound = strdup(alarmMinSound);
+      }
+      else
+      {
+        sound = strdup(okMinSound);
+      }
+   }
+ tmrpcm.play(sound);
+ return input;
 }
 
 int getTemp() {
@@ -180,12 +240,4 @@ int getHumidity() {
   {
     return humidityInPercent;
   }
-}
-
-/**
- * Plays a pitch for 100ms and activates servo.
- */
-void playSound(const char* sound, int delayTime) {
-  tmrpcm.setVolume(6);
-  tmrpcm.play(sound);
 }
