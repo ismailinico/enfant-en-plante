@@ -1,17 +1,21 @@
 #include <Servo.h>
-Servo servo1;
 
-void setup()
-{
-  servo1.attach(3);
+Servo myservo;
+int pos = 0;
+
+void setup() {
+  myservo.attach(3);
 }
+void loop() {
 
-void loop()
-{
-  servo1.write(120);
-  tone(4, 100);
-  delay(1000);
-  servo1.write(30);
-  noTone(4);
-  delay(1000);
+  for (pos = 120; pos <= 180; pos += 1) { 
+    myservo.write(pos);
+    delay(5);
+  }
+
+  for (pos = 180; pos >= 120; pos -= 1) {
+    myservo.write(pos);
+    delay(5); 
+  }
+
 }

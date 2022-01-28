@@ -1,6 +1,6 @@
 #include <DallasTemperature.h>
 #include <OneWire.h>
-#include <Servo.h>
+#include"ServoTimer2.h"
 #include "TMRpcm.h"
 #include "SPI.h"
 #include "SD.h"
@@ -16,9 +16,9 @@
 #define SERVO_PIN 3
 #define TEMP_SENSOR_PIN 2
 #define SPEAKER_PIN 9
-#define LIGHT_SENSOR_PIN A1
-#define HUMIDITY_SENSOR_PIN A0
-#define SD_CARD_PIN 4
+#define LIGHT_SENSOR_PIN A0
+#define HUMIDITY_SENSOR_PIN A1
+#define SD_CARD_PIN 10
 
 // Sensor constants
 #define WATER_VALUE 420
@@ -29,45 +29,45 @@
 
 // Sounds
 // Humidity
-#define H_MAX_ALARM "wet.wav"
-#define H_MAX_WARN "wet.wav"
-#define H_MAX_OK "wet.wav"
-#define H_MAX_GOOD "humidity.wav"
-#define H_MIN_GOOD "humidity.wav"
-#define H_MIN_OK "dry.wav"
-#define H_MIN_WARN "dry.wav"
-#define H_MIN_ALARM "dry.wav"
+#define H_MAX_ALARM "hmaxal.wav"
+#define H_MAX_WARN "hmaxwa.wav"
+#define H_MAX_OK "hmaxok.wav"
+#define H_MAX_GOOD "hgood.wav"
+#define H_MIN_GOOD "hgood.wav"
+#define H_MIN_OK "hminok.wav"
+#define H_MIN_WARN "hminwa.wav"
+#define H_MIN_ALARM "hminal.wav"
 // Light 
-#define L_MAX_ALARM "bright.wav"
-#define L_MAX_WARN "bright.wav"
-#define L_MAX_OK "bright.wav"
-#define L_MAX_GOOD "light.wav"
-#define L_MIN_GOOD "light.wav"
-#define L_MIN_OK "dark.wav"
-#define L_MIN_WARN "dark.wav"
-#define L_MIN_ALARM "dark.wav"
+#define L_MAX_ALARM "lmaxal.wav"
+#define L_MAX_WARN "lmaxwa.wav"
+#define L_MAX_OK "lmaxok.wav"
+#define L_MAX_GOOD "lgood.wav"
+#define L_MIN_GOOD "lgood.wav"
+#define L_MIN_OK "lminok.wav"
+#define L_MIN_WARN "lminwa.wav"
+#define L_MIN_ALARM "lminal.wav"
 // Temperature
-#define T_MAX_ALARM "hot.wav"
-#define T_MAX_WARN "hot.wav"
-#define T_MAX_OK "hot.wav"
-#define T_MAX_GOOD "temp.wav"
-#define T_MIN_GOOD "temp.wav"
-#define T_MIN_OK "cold.wav"
-#define T_MIN_WARN "cold.wav"
-#define T_MIN_ALARM "cold.wav"
+#define T_MAX_ALARM "tmaxal.wav"
+#define T_MAX_WARN "tmaxwa.wav"
+#define T_MAX_OK "tmaxok.wav"
+#define T_MAX_GOOD "tgood.wav"
+#define T_MIN_GOOD "tgood.wav"
+#define T_MIN_OK "tminok.wav"
+#define T_MIN_WARN "tminwa.wav"
+#define T_MIN_ALARM "tminal.wav"
 
 // Servo
 
 // Chin angles
-#define OPEN 0
-#define CLOSE 0
+#define OPEN 2700
+#define CLOSE 1900
 
 // State flags
 
 // Humidity flags
-#define WET_ALARM 98
-#define WET_WARN 95
-#define MAX_HUMIDITY 90
+#define WET_ALARM 99
+#define WET_WARN 97
+#define MAX_HUMIDITY 95
 #define MIN_HUMIDITY 70
 #define DRY_WARN 45
 #define DRY_ALARM 15
@@ -88,19 +88,16 @@
 #define COLD_WARN 9
 #define COLD_ALARM 5
 
-Servo servo1;
+ServoTimer2 myservo;
 TMRpcm tmrpcm;
 OneWire oneWire(TEMP_SENSOR_PIN);
 DallasTemperature sensors(&oneWire);
-
-int prev_humidity = MIN_HUMIDITY, prev_light = MIN_BRIGHTNESS, prev_temp = MIN_TEMP;
+int prev_humidity = -1, prev_light = -1, prev_temp = -1;
 
 void setup()
 {
   // Set mode of analog pin
   pinMode(LIGHT_SENSOR_PIN, INPUT);
-  // Attach servo to digital pin 3 and set it to 0
-  servo1.attach(SERVO_PIN);
   // Begin accepting data from serial bus
   Serial.begin(9600);
   // Begin reading data from temperature sensor
@@ -110,33 +107,32 @@ void setup()
   if (!SD.begin(SD_CARD_PIN)) {
     Serial.println("SD fail");
   }
+  // Attach servo to digital pin 3 and set it to 0
+  myservo.attach(SERVO_PIN);
+  myservo.write(CLOSE);
 }
 
 void loop()
 {
 int humidity = getHumidity(), light = getBrightness(), temp = getTemp();
- Serial.print("\nPrevious humidity: ");
+
+ Serial.print("\n\nPrevious humidity[%]: ");
  Serial.print(prev_humidity);
- Serial.print("%\nPrevious brigtness: ");
+ Serial.print("\nPrevious brigtness[%]: ");
  Serial.print(prev_light);
- Serial.print("%\nPrevious temperature: ");
+ Serial.print("\nPrevious temperature[°C]: ");
  Serial.print(prev_temp);
- Serial.print("°C\n");
- Serial.print("\nHumidity: ");
- Serial.print(humidity);
- Serial.print("%\nBrigtness: ");
- Serial.print(light);
- Serial.print("%\nTemperature: ");
- Serial.print(temp);
- Serial.print("°C\n");
+ 
+ Serial.print("\n\nHumidity[%]: ");
 prev_humidity = checkBounds(humidity, prev_humidity,
-            MIN_HUMIDITY, WET_WARN, WET_ALARM,
+            MAX_HUMIDITY, WET_WARN, WET_ALARM,
             H_MAX_GOOD, H_MAX_OK,
             H_MAX_WARN, H_MAX_ALARM,
-            MAX_HUMIDITY, DRY_WARN, DRY_ALARM,
+            MIN_HUMIDITY, DRY_WARN, DRY_ALARM,
             H_MIN_GOOD, H_MIN_OK,
             H_MIN_WARN, H_MIN_ALARM);
- delay(4000);
+ delay(2000);
+  Serial.print("\nBrigtness[%]: ");
  prev_light = checkBounds(light, prev_light,
             MAX_BRIGHTNESS, BRIGHT_WARN, BRIGHT_ALARM,
             L_MAX_GOOD, L_MAX_OK,
@@ -144,7 +140,8 @@ prev_humidity = checkBounds(humidity, prev_humidity,
             MIN_BRIGHTNESS, DARK_WARN, DARK_ALARM,
             L_MIN_GOOD, L_MIN_OK,
             L_MIN_WARN, L_MIN_ALARM);
- delay(4000);
+ delay(2000);
+ Serial.print("\nTemperature[°C]: ");
  prev_temp = checkBounds(temp, prev_temp,
             MAX_TEMP, HOT_WARN, HOT_ALARM,
             T_MAX_GOOD, T_MAX_OK,
@@ -152,7 +149,7 @@ prev_humidity = checkBounds(humidity, prev_humidity,
             MIN_TEMP, COLD_WARN, COLD_ALARM,
             T_MIN_GOOD, T_MIN_OK,
             T_MIN_WARN, T_MIN_ALARM);
-  delay(4000);
+ delay(2000);
 }
 
 int checkBounds(int input, int prevInput,
@@ -162,9 +159,12 @@ int checkBounds(int input, int prevInput,
         int minValue, int warnMinValue, int alarmMinValue,
         char const *goodMinSound, char const *okMinSound,
         char const *warnMinSound, char const *alarmMinSound) {
-          
   char* sound = NULL;
+  Serial.print(input);
   if (input < maxValue && input > minValue) {
+    if(prevInput == -1) {
+      return input;
+    }
     if(prevInput > maxValue) {
       sound = strdup(goodMaxSound);
     }
@@ -201,7 +201,16 @@ int checkBounds(int input, int prevInput,
         sound = strdup(okMinSound);
       }
    }
- tmrpcm.play(sound);
+  delay(10);
+  if (sound != NULL) {
+    Serial.print("\nNow playing ");
+    Serial.print(sound);
+    tmrpcm.play(sound);
+    delay(10);
+    myservo.write(OPEN);
+    delay(5000);
+    myservo.write(CLOSE);
+  }
  return input;
 }
 
